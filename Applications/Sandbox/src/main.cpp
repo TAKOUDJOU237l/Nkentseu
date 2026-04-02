@@ -1229,6 +1229,171 @@ int main() {
         printf("\n");
     }
 
-    printf("=== Tous les tests TP1 a TP9 passes ! ===\n");
+    // ============================================================
+    // SEMAINE 4 - TP1 : Quat.h
+    // Tests 41 à 43
+    // ============================================================
+
+    // TP1 - Test 41 : Rotate(FromAxisAngle(Y,PI/2),{1,0,0}) ≈ {0,0,-1}
+    printf("=== S4-TP1 - Test 41 : Rotate ===\n");
+    {
+        Quat q=FromAxisAngle(Vec3d(0,1,0),kPi/2.0);
+        Vec3d v(1.0,0.0,0.0);
+        Vec3d r=Rotate(q,v);
+        printf("  Rotate(Y,PI/2,{1,0,0})"
+               " = {%.6f,%.6f,%.6f}\n",
+               r.x,r.y,r.z);
+        assert(approxEq(r.x, 0.0,1e-9));
+        assert(approxEq(r.y, 0.0,1e-9));
+        assert(approxEq(r.z,-1.0,1e-9));
+        printf("  assert {0,0,-1} OK\n\n");
+    }
+
+    // TP1 - Test 42 : Quat->Mat3->Quat sur 50 aleatoires
+    printf("=== S4-TP1 - Test 42 : Quat->Mat3->Quat ===\n");
+    {
+        int seed=42;
+        int passed=0;
+        for (int i=0;i<50;i++) {
+            Quat q1(pseudoRand(seed),
+                    pseudoRand(seed),
+                    pseudoRand(seed),
+                    pseudoRand(seed));
+            q1=q1.Normalized();
+            Mat3d m =ToMat3(q1);
+            Quat  q2=FromMat3(m);
+            bool same=(
+                approxEq(q1.w, q2.w,kEps)&&
+                approxEq(q1.x, q2.x,kEps)&&
+                approxEq(q1.y, q2.y,kEps)&&
+                approxEq(q1.z, q2.z,kEps)
+            )||(
+                approxEq(q1.w,-q2.w,kEps)&&
+                approxEq(q1.x,-q2.x,kEps)&&
+                approxEq(q1.y,-q2.y,kEps)&&
+                approxEq(q1.z,-q2.z,kEps)
+            );
+            assert(same);
+            passed++;
+        }
+        printf("  %d/50 aller-retour OK\n\n",passed);
+    }
+
+    // TP1 - Test 43 : Quat x Quat.Inverse() = identite
+    printf("=== S4-TP1 - Test 43 : Quat x Inverse ===\n");
+    {
+        int seed=99;
+        for (int i=0;i<10;i++) {
+            Quat q(pseudoRand(seed),
+                   pseudoRand(seed),
+                   pseudoRand(seed),
+                   pseudoRand(seed));
+            q=q.Normalized();
+            Quat qInv=q.Inverse();
+            Quat I   =q*qInv;
+            assert(approxEq(I.w,1.0,1e-9));
+            assert(approxEq(I.x,0.0,1e-9));
+            assert(approxEq(I.y,0.0,1e-9));
+            assert(approxEq(I.z,0.0,1e-9));
+            printf("  quat %2d OK\n",i+1);
+        }
+        printf("\n");
+    }
+
+    // ============================================================
+    // SEMAINE 4 - TP2 : quat-slerp.cpp
+    // Tests 44 à 46
+    // ============================================================
+
+    // TP2 - Test 44 : SLERP 60 frames
+    printf("=== S4-TP2 - Test 44 : SLERP 60 frames ===\n");
+    {
+        Quat qa=FromAxisAngle(Vec3d(0,1,0),0.0);
+        Quat qb=FromAxisAngle(Vec3d(0,1,0),kPi);
+        Mat4d view=Mat4d::LookAt(
+            Vec3d(0,1,3),Vec3d(0,0,0),Vec3d(0,1,0)
+        );
+        for (int frame=0;frame<60;frame++) {
+            double t=(double)frame/59.0;
+            Quat qs=Slerp(qa,qb,t);
+            Mat4d Ms=QuatToMat4(qs);
+            NkImage img(512,512);
+            img.Fill(20,20,20);
+            drawCube(img,view,Ms,0,255,0);
+            char fn[64];
+            snprintf(fn,sizeof(fn),
+                     "slerp_frame_%02d.ppm",frame);
+            assert(img.SavePPM(fn));
+        }
+        printf("  60 frames SLERP OK\n\n");
+    }
+
+    // TP2 - Test 45 : SLERP vs LERP comparaison
+    printf("=== S4-TP2 - Test 45 : SLERP vs LERP ===\n");
+    {
+        Quat qa=FromAxisAngle(Vec3d(1,0,0),0.0);
+        Quat qb=FromAxisAngle(Vec3d(0,1,0),kPi*0.8);
+        Mat4d view=Mat4d::LookAt(
+            Vec3d(0,1,3),Vec3d(0,0,0),Vec3d(0,1,0)
+        );
+        printf("  frame | angle_slerp | angle_lerp"
+               " | diff\n");
+        printf("  ------|-------------|----------"
+               "--|-----\n");
+        for (int frame=0;frame<10;frame++) {
+            double t=(double)frame/9.0;
+            Quat qs=Slerp(qa,qb,t);
+            Quat ql=LerpQuat(qa,qb,t);
+            double as=2.0*std::acos(
+                qs.w<-1?-1:(qs.w>1?1:qs.w)
+            )*180.0/kPi;
+            double al=2.0*std::acos(
+                ql.w<-1?-1:(ql.w>1?1:ql.w)
+            )*180.0/kPi;
+            printf("  %5d | %11.4f | %10.4f"
+                   " | %.4f\n",
+                   frame,as,al,std::abs(as-al));
+            NkImage img(512,512);
+            img.Fill(20,20,20);
+            Mat4d Ms=QuatToMat4(qs);
+            Mat4d Ml=QuatToMat4(ql);
+            drawCube(img,view,Ms,0,255,0);
+            drawCube(img,view,Ml,255,0,0);
+            char fn[64];
+            snprintf(fn,sizeof(fn),
+                     "compare_frame_%02d.ppm",frame);
+            img.SavePPM(fn);
+        }
+        printf("  SLERP vert=uniforme"
+               " LERP rouge=non-uniforme\n\n");
+    }
+
+    // TP2 - Test 46 : Cube rotation 60 frames
+    printf("=== S4-TP2 - Test 46 : Cube rotation ===\n");
+    {
+        Mat4d view=Mat4d::LookAt(
+            Vec3d(0,1,3),Vec3d(0,0,0),Vec3d(0,1,0)
+        );
+        Quat qStart=FromAxisAngle(Vec3d(0,1,0),0.0);
+        Quat qEnd  =FromAxisAngle(
+            Vec3d(1,1,0).Normalized(),kPi*2.0
+        );
+        for (int frame=0;frame<60;frame++) {
+            double t=(double)frame/59.0;
+            Quat q=Slerp(qStart,qEnd,t);
+            Mat4d M=QuatToMat4(q);
+            NkImage img(512,512);
+            img.Fill(15,15,30);
+            drawCube(img,view,M,0,200,255);
+            char fn[64];
+            snprintf(fn,sizeof(fn),
+                     "cube_quat_%02d.ppm",frame);
+            assert(img.SavePPM(fn));
+            printf("  frame %2d t=%.2f OK\n",frame,t);
+        }
+        printf("\n");
+    }
+
+    printf("=== Tous les tests S1 a S4 passes ! ===\n");
     return 0;
 }
